@@ -1,4 +1,5 @@
 Macroeconomic data sandbox
+==========================
 
 [lab.py](lab.py) can now:
 - read data from local csv file 
@@ -6,30 +7,17 @@ Macroeconomic data sandbox
 - plot time series and saving them to Excel file
 
 Now working:
-- add df directly to Indicator class 
 - groups of variables
 - separate names for groups of variables
 
+May need:
+- add df directly to Indicator class 
+
 Ideas:
 - Indicator() to replace KEP() class
+- New [KEP package structure](CSV-Database-Pandas.md)
 
-
-# Database configuration for Rosstat KEP Data
-
-- Use Factory and Dependency Injection as database wrappers
-- MVC?
-- SQLite
-
-Main job:
-- parse a CSV using config files 
-- get this new data from CSV (possibly a generator)
-- update a database using this new data 
-- create pandas dataframes from a database 
-
-```
-db # database connection
-s = CSV_Reader(csv_filename, config_filnames).get_stream()
-DatabaseUpdater(db, s).update() 
-dfa = DataframeConstructor(db, "annual").get_df()
-```
-
+Enhancements:
+- better graphs
+- first column formatting in xls 
+- several sheets in xls file 
