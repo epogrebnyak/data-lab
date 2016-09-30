@@ -4,46 +4,35 @@
 import pandas as pd
 from datetime import date, datetime
 
-#
-# 1. Страница 4 рисунка
-# =====================
-#
-# Нарисовать 4 графика на страницу, в каждом по одному временному ряду. 
-#
-#
-
-#p = Page(["GDP", "CPI", "PPI", ""], header="", freq="m", start=None, end=None)
-
-
-#
-# 2. Один риснок
-# ==============
-#
-# Нарисовать рисунок с одним временным рядом. 
-#
-# May use plotting archives
-# https://github.com/epogrebnyak/plotting
-# https://github.com/epogrebnyak/data-rosstat-kep/blob/master/kep/getter/plots.py
-#
-
-
-
 DFA_PATH = "data_annual.txt"
 DFQ_PATH = "data_quarter.txt"
 DFM_PATH = "data_monthly.txt"
+CSV_PATHS = {'a': DFA_PATH, 'q': DFQ_PATH, 'm': DFM_PATH}
 
 DEFAULT_FREQUENCY = "m"
 VALID_FREQUENCIES = "aqm"
 
+# backshift operator 
+T = 5
+
 def year_backshift(T=5):
-    return pd.Timestamp(datetime(date.today().year-T, 1, 1))
+    cur_year = date.today().year
+    return str(cur_year-T) + "-01"
     
 DEFAULT_START = year_backshift()
 
-dfa = pd.read_csv(DFA_PATH, index_col = 0)
-dfq = pd.read_csv(DFQ_PATH, converters = {'time_index':pd.to_datetime}, index_col = 'time_index')
-dfm = pd.read_csv(DFM_PATH, converters = {'time_index':pd.to_datetime}, index_col = 'time_index')
-DATAFRAMES = {'a': dfa, 'q': dfq, 'm': dfm}
+def read_csv_as_dataframes(paths = CSV_PATHS):
+
+    def to_ts(year):
+        return pd.Timestamp(datetime(int(year),12,31))
+        
+    #dfa = pd.read_csv(paths['a'], index_col = 0)
+    dfa = pd.read_csv(paths['a'], converters = {'year':to_ts},          index_col = 'year')
+    dfq = pd.read_csv(paths['q'], converters = {'time_index':pd.to_datetime}, index_col = 'time_index')
+    dfm = pd.read_csv(paths['m'], converters = {'time_index':pd.to_datetime}, index_col = 'time_index')
+    return {'a': dfa, 'q': dfq, 'm': dfm}
+ 
+DATAFRAMES = read_csv_as_dataframes() 
 
 class Indicator():
 
@@ -62,33 +51,51 @@ class Indicator():
         # labels not in column names omitted         
         return [x for x in labels if x in self.dataframe.columns]        
     
-    def __init__(self, label_values, freq=DEFAULT_FREQUENCY, start=DEFAULT_START, end=None):
+    def _roll_date_back(self, start, t = T):
+        last_index = self.dataframe.index[-1]
+        if isinstance(last_index, pd.tslib.Timestamp):
+            return str(last_index.year-t) + "-01"
+        else:
+            return self.dataframe.index[-1]-t
+    
+    def __init__(self, label_values, freq=DEFAULT_FREQUENCY, start=None, end=None):
         self.dataframe = self.set_frequency(freq)        
         self.labels = self.filter_labels(label_values)
+        start = self._roll_date_back(start)
         self.df = self.dataframe.loc[start:end,self.labels] 
         # filename base
         self.basename = "+".join(self.labels) 
         
-    def to_png(self):
-        filename = self.basename + ".png"
+    def make_filename(self, filename, ext):
+        if not filename:
+            filename = self.basename + ext
+        elif "." not in filename:
+            filename = filename + ext
+        return filename             
+        
+    def to_png(self, filename=None):    
+        filename = self.make_filename(filename, ".png")
         ax = self.df.plot()
         fig = ax.get_figure()
         fig.savefig(filename)                              
         
-    def to_excel(self):
-        filename = self.basename + ".xls"
+    def to_excel(self, filename=None):
+        filename = self.make_filename(filename, ".xls")
         self.df.to_excel(filename)
 
-    def dump(self):
-        self.to_png()
-        self.to_excel()        
+    def dump(self, basename=None):
+        self.to_png(basename)
+        self.to_excel(basename)        
         
 cpi = Indicator(["CPI_rog", "CPI_NONFOOD_rog", "CPI_FOOD_rog", "CPI_SERVICES_rog"])
-cpi.to_png()
-cpi.to_excel()
+cpi.to_png("CPI")
+cpi.to_excel("CPI")
 
 gdp = Indicator(["I_yoy", "GDP_yoy", "IND_PROD_yoy", "RETAIL_SALES_yoy"], freq="q")
-gdp.dump()
+gdp.dump("GDP")
+
+gov = Indicator(["GOV_CONSOLIDATED_EXPENSE_ACCUM_bln_rub", "GOV_CONSOLIDATED_REVENUE_ACCUM_bln_rub"], freq="a")
+gov.dump("GOV")
 
 
 """
