@@ -11,7 +11,7 @@ CSV_PATHS = {'a': DFA_PATH, 'q': DFQ_PATH, 'm': DFM_PATH}
 
 DEFAULT_FREQUENCY = "m"
 VALID_FREQUENCIES = "aqm"
-
+DEFAULT_BACKSHIFT = 5
 # backshift operator 
 T = 5
 
@@ -36,7 +36,7 @@ DATAFRAMES = read_csv_as_dataframes()
 
 class Indicator():
 
-    def set_frequency(self, freq):
+    def _set_frequency(self, freq):
         freq = freq.lower()
         if freq not in VALID_FREQUENCIES :
             raise Exeption("Invalid frequency: " + freq + 
@@ -44,14 +44,14 @@ class Indicator():
         else:
             return DATAFRAMES[freq]    
         
-    def filter_labels(self, labels):
+    def _filter_labels(self, labels):
         # convert to list if one label is given
         if isinstance(labels, str):
             labels = [labels]
         # labels not in column names omitted         
         return [x for x in labels if x in self.dataframe.columns]        
     
-    def _roll_date_back(self, start, t = T):
+    def _roll_date_back(self, start, t = DEFAULT_BACKSHIFT):
         last_index = self.dataframe.index[-1]
         if isinstance(last_index, pd.tslib.Timestamp):
             return str(last_index.year-t) + "-01"
@@ -59,14 +59,14 @@ class Indicator():
             return self.dataframe.index[-1]-t
     
     def __init__(self, label_values, freq=DEFAULT_FREQUENCY, start=None, end=None):
-        self.dataframe = self.set_frequency(freq)        
-        self.labels = self.filter_labels(label_values)
-        start = self._roll_date_back(start)
+        self.dataframe = self._set_frequency(freq)        
+        self.labels    = self._filter_labels(label_values)
+        start          = self._roll_date_back(start)
         self.df = self.dataframe.loc[start:end,self.labels] 
         # filename base
         self.basename = "+".join(self.labels) 
         
-    def make_filename(self, filename, ext):
+    def _make_filename(self, filename, ext):
         if not filename:
             filename = self.basename + ext
         elif "." not in filename:
@@ -74,28 +74,82 @@ class Indicator():
         return filename             
         
     def to_png(self, filename=None):    
-        filename = self.make_filename(filename, ".png")
+        filename = self._make_filename(filename, ".png")
         ax = self.df.plot()
         fig = ax.get_figure()
         fig.savefig(filename)                              
         
     def to_excel(self, filename=None):
-        filename = self.make_filename(filename, ".xls")
+        filename = self._make_filename(filename, ".xls")
         self.df.to_excel(filename)
 
     def dump(self, basename=None):
         self.to_png(basename)
         self.to_excel(basename)        
-        
-cpi = Indicator(["CPI_rog", "CPI_NONFOOD_rog", "CPI_FOOD_rog", "CPI_SERVICES_rog"])
-cpi.to_png("CPI")
-cpi.to_excel("CPI")
 
-gdp = Indicator(["I_yoy", "GDP_yoy", "IND_PROD_yoy", "RETAIL_SALES_yoy"], freq="q")
+        
+# gdp   ВВП
+# cpi   инфляция
+# fx    курс
+# pb    платежный баланс 
+# cap   инвестиции
+# hh    доходы и расходы населения
+# gov   госрасходы 
+# oil   нефть
+
+
+# FINAL USE:
+#
+#
+
+# EVALUATE:
+#     не надо обрезать ряды на стадии хранения данных, нужно только для рисунков
+#     for testing must have different frequencies a and q and m
+#     страница html с месяцами, кварталами и годами + сохранить 
+#     все сохранять
+#     сразу делать app в интернете
+
+# TODO 1:
+#     завести нефть 
+#     обрабатывать значения (разности и темпы роста) - для создания новых переменных
+
+# TODO 2:
+#     снимать сезонность
+#     сделать инерционный прогноз
+
+# ENHANCE:
+#     подписи осей графика + количество белого
+
+
+cpi = Indicator(["CPI_rog", "CPI_NONFOOD_rog", "CPI_FOOD_rog", "CPI_SERVICES_rog"])
+cpi.dump("CPI")
+
+gdp = Indicator(["I_yoy", "GDP_yoy", "IND_PROD_yoy", "RETAIL_SALES_yoy"], freq="m") # was "q"
 gdp.dump("GDP")
 
-gov = Indicator(["GOV_CONSOLIDATED_EXPENSE_ACCUM_bln_rub", "GOV_CONSOLIDATED_REVENUE_ACCUM_bln_rub"], freq="a")
+gov = Indicator(["GOV_CONSOLIDATED_EXPENSE_ACCUM_bln_rub", "GOV_CONSOLIDATED_REVENUE_ACCUM_bln_rub"], freq="m") # was "a"
 gov.dump("GOV")
+
+fx = Indicator(["RUR_EUR_eop", "RUR_USD_eop" ], freq="m")
+fx.dump("FX")
+
+bop = Indicator(["TRADE_GOODS_EXPORT_bln_usd", "TRADE_GOODS_IMPORT_bln_usd"])
+bop.dump("BOP")
+
+hh = Indicator(["RETAIL_SALES_yoy", "HH_REAL_DISPOSABLE_INCOME_yoy", "SOC_WAGE_yoy"])
+hh.dump("HH")
+
+credit = Indicator(["CREDIT_TOTAL_bln_rub", "CORP_DEBT_bln_rub"])
+credit.dump("CREDIT")
+
+real1 = Indicator(["TRANS_RAILLOAD_mln_t", "TRANS_bln_t_km", "PROD_E_TWh", "CONSTR_bln_rub_fix"])
+real1.dump("REAL1")
+
+real2 = Indicator(["TRANS_RAILLOAD_mln_t", "TRANS_bln_t_km", "PROD_E_TWh", "CONSTR_bln_rub_fix"])
+real2.dump("REAL2")
+
+
+
 
 
 """
