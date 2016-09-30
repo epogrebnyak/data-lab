@@ -1,0 +1,19 @@
+#
+# 1. Страница 4 рисунка
+# =====================
+#
+# Нарисовать 4 графика на страницу, в каждом по одному временному ряду. 
+#
+#
+
+#p = Page(["GDP", "CPI", "PPI", ""], header="", freq="m", start=None, end=None)
+
+
+#
+# Нарисовать рисунок с одним временным рядом. 
+#
+# May use plotting archives
+# https://github.com/epogrebnyak/plotting
+# https://github.com/epogrebnyak/data-rosstat-kep/blob/master/kep/getter/plots.py
+#
+
