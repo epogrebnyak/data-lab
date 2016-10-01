@@ -1,25 +1,25 @@
 # -*- coding: utf-8 -*-
 # 9:58 29.09.2016	10:28 29.09.2016
 
+import os
 import pandas as pd
 from datetime import date, datetime
 
-DFA_PATH = "data_annual.txt"
-DFQ_PATH = "data_quarter.txt"
-DFM_PATH = "data_monthly.txt"
+# -----------------------------------------------------------------------
+
+DIRS = {".png":"png", 
+        ".xls":"xls"}
+
+# -----------------------------------------------------------------------
+
+CSV_DIR = "csv"
+DFA_PATH = os.path.join(CSV_DIR, "data_annual.txt")
+DFQ_PATH = os.path.join(CSV_DIR, "data_quarter.txt")
+DFM_PATH = os.path.join(CSV_DIR, "data_monthly.txt")
 CSV_PATHS = {'a': DFA_PATH, 'q': DFQ_PATH, 'm': DFM_PATH}
 
-DEFAULT_FREQUENCY = "m"
-VALID_FREQUENCIES = "aqm"
-DEFAULT_BACKSHIFT = 5
-# backshift operator 
-T = 5
-
-def year_backshift(T=5):
-    cur_year = date.today().year
-    return str(cur_year-T) + "-01"
-    
-DEFAULT_START = year_backshift()
+for f in CSV_PATHS.values():
+    assert os.path.exists(f)
 
 def read_csv_as_dataframes(paths = CSV_PATHS):
 
@@ -33,13 +33,31 @@ def read_csv_as_dataframes(paths = CSV_PATHS):
     return {'a': dfa, 'q': dfq, 'm': dfm}
  
 DATAFRAMES = read_csv_as_dataframes() 
+dfa = DATAFRAMES['a']
+dfq = DATAFRAMES['q']
+dfm = DATAFRAMES['m']
+
+# -----------------------------------------------------------------------
+
+DEFAULT_FREQUENCY = "m"
+VALID_FREQUENCIES = "aqm"
+DEFAULT_BACKSHIFT = 5
+# backshift operator 
+T = 5
+
+def year_backshift(T=5):
+    cur_year = date.today().year
+    return str(cur_year-T) + "-01"
+    
+DEFAULT_START = year_backshift()
+
 
 class Indicator():
 
     def _set_frequency(self, freq):
         freq = freq.lower()
         if freq not in VALID_FREQUENCIES :
-            raise Exeption("Invalid frequency: " + freq + 
+            raise Exception ("Invalid frequency: " + freq + 
                            "\nAccepted: " + ", ".join(VALID_FREQUENCIES))        
         else:
             return DATAFRAMES[freq]    
@@ -66,12 +84,12 @@ class Indicator():
         # filename base
         self.basename = "+".join(self.labels) 
         
-    def _make_filename(self, filename, ext):
+    def _make_filename(self, filename, ext, dirs = DIRS):
         if not filename:
             filename = self.basename + ext
         elif "." not in filename:
             filename = filename + ext
-        return filename             
+        return os.path.join(dirs[ext], filename)             
         
     def to_png(self, filename=None):    
         filename = self._make_filename(filename, ".png")
@@ -142,10 +160,10 @@ hh.dump("HH")
 credit = Indicator(["CREDIT_TOTAL_bln_rub", "CORP_DEBT_bln_rub"])
 credit.dump("CREDIT")
 
-real1 = Indicator(["TRANS_RAILLOAD_mln_t", "TRANS_bln_t_km", "PROD_E_TWh", "CONSTR_bln_rub_fix"])
+real1 = Indicator(["TRANS_bln_t_km", "CONSTR_bln_rub_fix"])
 real1.dump("REAL1")
 
-real2 = Indicator(["TRANS_RAILLOAD_mln_t", "TRANS_bln_t_km", "PROD_E_TWh", "CONSTR_bln_rub_fix"])
+real2 = Indicator(["TRANS_RAILLOAD_mln_t", "PROD_E_TWh", ])
 real2.dump("REAL2")
 
 
