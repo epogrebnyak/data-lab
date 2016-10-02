@@ -1,174 +1,217 @@
 # -*- coding: utf-8 -*-
-# 9:58 29.09.2016	10:28 29.09.2016
 
 import os
 import pandas as pd
-from datetime import date, datetime
+from datetime import datetime
 
-# -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
-DIRS = {".png":"png", 
-        ".xls":"xls"}
+CSV_PATHS = {'a': os.path.join("csv", "data_annual.txt")
+            ,'q': os.path.join("csv", "data_quarter.txt") 
+            ,'m': os.path.join("csv", "data_monthly.txt") }
 
-# -----------------------------------------------------------------------
+DEFAULT_BACKSHIFT = 10
 
-CSV_DIR = "csv"
-DFA_PATH = os.path.join(CSV_DIR, "data_annual.txt")
-DFQ_PATH = os.path.join(CSV_DIR, "data_quarter.txt")
-DFM_PATH = os.path.join(CSV_DIR, "data_monthly.txt")
-CSV_PATHS = {'a': DFA_PATH, 'q': DFQ_PATH, 'm': DFM_PATH}
+DIRS = {".png":"png", ".xls":"xls"}
 
-for f in CSV_PATHS.values():
-    assert os.path.exists(f)
+MY_DPI = 96
 
-def read_csv_as_dataframes(paths = CSV_PATHS):
+# -----------------------------------------------------------------------------
+# Import data 
+
+def read_dataframes(paths = CSV_PATHS):
 
     def to_ts(year):
-        return pd.Timestamp(datetime(int(year),12,31))
+        return pd.Timestamp(datetime(int(year),12,31))        
         
-    #dfa = pd.read_csv(paths['a'], index_col = 0)
-    dfa = pd.read_csv(paths['a'], converters = {'year':to_ts},          index_col = 'year')
+    dfa = pd.read_csv(paths['a'], converters = {'year':to_ts}, index_col = 'year')    
     dfq = pd.read_csv(paths['q'], converters = {'time_index':pd.to_datetime}, index_col = 'time_index')
     dfm = pd.read_csv(paths['m'], converters = {'time_index':pd.to_datetime}, index_col = 'time_index')
-    return {'a': dfa, 'q': dfq, 'm': dfm}
- 
-DATAFRAMES = read_csv_as_dataframes() 
-dfa = DATAFRAMES['a']
-dfq = DATAFRAMES['q']
-dfm = DATAFRAMES['m']
+    return dfa, dfq, dfm
 
-# -----------------------------------------------------------------------
+DFA, DFQ, DFM =  read_dataframes() 
 
-DEFAULT_FREQUENCY = "m"
-VALID_FREQUENCIES = "aqm"
-DEFAULT_BACKSHIFT = 5
-# backshift operator 
-T = 5
+# -----------------------------------------------------------------------------
+# Brush/transform data, add variables
 
-def year_backshift(T=5):
-    cur_year = date.today().year
-    return str(cur_year-T) + "-01"
-    
-DEFAULT_START = year_backshift()
+       
+def deaccumulate(df):
+    df2 = df.copy()
+    for i in range(len(df)):
+        if df.index[i].month > 1:
+            df2.iloc[i] = df.iloc[i]-df.iloc[i-1]
+        else: 
+            df2.iloc[i] = df.iloc[i] 
+    return df2
 
+rev = deaccumulate(DFM["GOV_CONSOLIDATED_REVENUE_ACCUM_bln_rub"])
+exp = deaccumulate(DFM["GOV_CONSOLIDATED_EXPENSE_ACCUM_bln_rub"])            
+DFM["GOV_CONSOLIDATED_EXPENSE_bln_rub"] = exp
+DFM["GOV_CONSOLIDATED_REVENUE_bln_rub"] = rev
+DFM["GOV_CONSOLIDATED_DEFICIT_bln_rub"] = rev-exp
 
-class Indicator():
+fed = deaccumulate(DFM["GOV_FEDERAL_SURPLUS_ACCUM_bln_rub"])
+subfed = deaccumulate(DFM["GOV_SUBFEDERAL_SURPLUS_ACCUM_bln_rub"])
 
-    def _set_frequency(self, freq):
-        freq = freq.lower()
-        if freq not in VALID_FREQUENCIES :
-            raise Exception ("Invalid frequency: " + freq + 
-                           "\nAccepted: " + ", ".join(VALID_FREQUENCIES))        
-        else:
-            return DATAFRAMES[freq]    
-        
-    def _filter_labels(self, labels):
-        # convert to list if one label is given
-        if isinstance(labels, str):
-            labels = [labels]
-        # labels not in column names omitted         
-        return [x for x in labels if x in self.dataframe.columns]        
-    
-    def _roll_date_back(self, start, t = DEFAULT_BACKSHIFT):
-        last_index = self.dataframe.index[-1]
-        if isinstance(last_index, pd.tslib.Timestamp):
-            return str(last_index.year-t) + "-01"
-        else:
-            return self.dataframe.index[-1]-t
-    
-    def __init__(self, label_values, freq=DEFAULT_FREQUENCY, start=None, end=None):
-        self.dataframe = self._set_frequency(freq)        
-        self.labels    = self._filter_labels(label_values)
-        start          = self._roll_date_back(start)
-        self.df = self.dataframe.loc[start:end,self.labels] 
-        # filename base
-        self.basename = "+".join(self.labels) 
-        
-    def _make_filename(self, filename, ext, dirs = DIRS):
-        if not filename:
-            filename = self.basename + ext
-        elif "." not in filename:
-            filename = filename + ext
-        return os.path.join(dirs[ext], filename)             
-        
-    def to_png(self, filename=None):    
-        filename = self._make_filename(filename, ".png")
-        ax = self.df.plot()
-        fig = ax.get_figure()
-        fig.savefig(filename)                              
-        
-    def to_excel(self, filename=None):
-        filename = self._make_filename(filename, ".xls")
-        self.df.to_excel(filename)
-
-    def dump(self, basename=None):
-        self.to_png(basename)
-        self.to_excel(basename)        
-
-        
-# gdp   ВВП
-# cpi   инфляция
-# fx    курс
-# pb    платежный баланс 
-# cap   инвестиции
-# hh    доходы и расходы населения
-# gov   госрасходы 
-# oil   нефть
+DFM["GOV_FEDERAL_SURPLUS_bln_rub"] = fed 
+DFM["GOV_SUBFEDERAL_SURPLUS_bln_rub"] = subfed
+DFM["GOV_CONSOLIDATED_SURPLUS_bln_rub"] = fed + subfed 
 
 
-# FINAL USE:
+ex = DFM["TRADE_GOODS_EXPORT_bln_usd"]
+im = DFM["TRADE_GOODS_IMPORT_bln_usd"]
+DFM["TRADE_GOODS_NET_EXPORT_bln_usd"] = ex-im
+
 #
+# todo:
+#     get annual values from monthly 
+#     get quarterly values from monthly 
 #
 
-# EVALUATE:
-#     не надо обрезать ряды на стадии хранения данных, нужно только для рисунков
-#     for testing must have different frequencies a and q and m
-#     страница html с месяцами, кварталами и годами + сохранить 
-#     все сохранять
-#     сразу делать app в интернете
 
-# TODO 1:
-#     завести нефть 
-#     обрабатывать значения (разности и темпы роста) - для создания новых переменных
+# -----------------------------------------------------------------------------
 
-# TODO 2:
-#     снимать сезонность
-#     сделать инерционный прогноз
+class Indicators():
 
-# ENHANCE:
-#     подписи осей графика + количество белого
+    def __init__(self, groupname, labels, freq, start=None, end=None):        
+
+        self.basename = groupname
+        self.freq = freq
+        
+        self.dfa = self.make_df(labels, "a", start, end)
+        self.dfq = self.make_df(labels, "q", start, end)
+        self.dfm = self.make_df(labels, "m", start, end)
+        
+        self.df  = self.make_df(labels, freq, start, end)
+          
+    def make_df(self, labels, freq, start, end,  
+                t=DEFAULT_BACKSHIFT, dfs={'a': DFA, 'q': DFQ, 'm': DFM}):
+        try:
+           df = dfs[freq]            
+        except: 
+           raise Exception ("Invalid frequency: " + str(freq))  
+           
+        filtered_labels = [x for x in labels if x in df.columns] 
+        df = df[filtered_labels]            
+        
+        if not start:   
+           start = str(df.index[-1].year-DEFAULT_BACKSHIFT) + "-01"  
+           
+        return df.loc[start:end,:]                    
+          
+    def to_png(self, my_dpi = MY_DPI, dirs = DIRS):    
+        ext = ".png"
+        path = os.path.join(dirs[ext], self.freq + "_" + self.basename + ext)
+        if not self.df.empty:
+            ax = self.df.plot(figsize=(600/my_dpi, 450/my_dpi))
+            fig = ax.get_figure()
+            fig.savefig(path, dpi = MY_DPI)
+            fig.clear()
+        return "<img src=\"{0}\">".format(path)                             
+        
+    def to_excel(self, dirs = DIRS):        
+        ext = ".xls"
+        path = os.path.join(dirs[ext], self.basename + ext) 
+        with pd.ExcelWriter(path) as writer:
+           self.dfa.to_excel(writer, sheet_name='Annual')
+           self.dfq.to_excel(writer, sheet_name='Quarterly')
+           self.dfm.to_excel(writer, sheet_name='Monthly') 
+        # todo: clean first column in xls file  
+        return "<a href=\"{0}\">{1}</a>".format(path, self.basename + ext)                         
+      
+    def dump(self):
+        self.to_png()
+        self.to_excel()
 
 
-cpi = Indicator(["CPI_rog", "CPI_NONFOOD_rog", "CPI_FOOD_rog", "CPI_SERVICES_rog"])
-cpi.dump("CPI")
+def png_html_stream(groups, freq): 
+    for group_names in groups:
+        g1, g2 = group_names
+        msg1 = Indicators(g1, indicator_collection[g1], freq).to_png()
+        if g2:
+           msg2 = Indicators(g2, indicator_collection[g2], freq).to_png()
+        else:
+           msg2 = ""
+        yield(msg1)
+        yield(msg2)
+        yield("<BR>")
 
-gdp = Indicator(["I_yoy", "GDP_yoy", "IND_PROD_yoy", "RETAIL_SALES_yoy"], freq="m") # was "q"
-gdp.dump("GDP")
+def to_html(filename, gen):
+    with open(filename, "w") as html_file:
+        html_file.write("<HTML>\n<BODY>\n")
+        html_file.write("<a href=\"annual.html\">По годам</a> \
+                         <a href=\"quarterly.html\">По кварталам</a> \
+                         <a href=\"index.html\">По месяцам</a><br>\n")
+        for s in gen:
+            html_file.write(s)
+        html_file.write("</BODY>\n</HTML>")
+        
 
-gov = Indicator(["GOV_CONSOLIDATED_EXPENSE_ACCUM_bln_rub", "GOV_CONSOLIDATED_REVENUE_ACCUM_bln_rub"], freq="m") # was "a"
-gov.dump("GOV")
+if __name__ == "__main__":
+    
+    indicator_collection = {
+      "CPI":["CPI_rog", "CPI_NONFOOD_rog", "CPI_FOOD_rog", "CPI_SERVICES_rog"]
+    , "GDP":["I_yoy", "GDP_yoy", "IND_PROD_yoy", "RETAIL_SALES_yoy"]
+    , "GOV":["GOV_CONSOLIDATED_EXPENSE_bln_rub", "GOV_CONSOLIDATED_REVENUE_bln_rub", "GOV_CONSOLIDATED_DEFICIT_bln_rub"]
+    , "GOV2": ["GOV_FEDERAL_SURPLUS_bln_rub", "GOV_SUBFEDERAL_SURPLUS_bln_rub", "GOV_CONSOLIDATED_SURPLUS_bln_rub"]
+    , "FX" :["RUR_EUR_eop", "RUR_USD_eop" ]
+    , "BOP":["TRADE_GOODS_EXPORT_bln_usd", "TRADE_GOODS_IMPORT_bln_usd", "TRADE_GOODS_NET_EXPORT_bln_usd"]
+    , "CREDIT":["CREDIT_TOTAL_bln_rub", "CORP_DEBT_bln_rub"]
+    , "REAL":["TRANS_bln_t_km", "CONSTR_bln_rub_fix"]
+    , "REAL2":["TRANS_RAILLOAD_mln_t", "PROD_E_TWh"]
+    }
+    
+    groups = [("GDP", "CPI"), 
+              ("GOV", "GOV2"),
+              ("FX", None), 
+              ("BOP", "CREDIT"), 
+              ("REAL", "REAL2")]
+     
+    pages = {"m":"index.html"
+       , "a":"annual.html"
+       , "q":"quarterly.html"}
+       
+       
+    for freq in "aqm": 
+       pass        
+       gen = png_html_stream(groups, freq)
+       to_html(pages[freq], gen)
 
-fx = Indicator(["RUR_EUR_eop", "RUR_USD_eop" ], freq="m")
-fx.dump("FX")
-
-bop = Indicator(["TRADE_GOODS_EXPORT_bln_usd", "TRADE_GOODS_IMPORT_bln_usd"])
-bop.dump("BOP")
-
-hh = Indicator(["RETAIL_SALES_yoy", "HH_REAL_DISPOSABLE_INCOME_yoy", "SOC_WAGE_yoy"])
-hh.dump("HH")
-
-credit = Indicator(["CREDIT_TOTAL_bln_rub", "CORP_DEBT_bln_rub"])
-credit.dump("CREDIT")
-
-real1 = Indicator(["TRANS_bln_t_km", "CONSTR_bln_rub_fix"])
-real1.dump("REAL1")
-
-real2 = Indicator(["TRANS_RAILLOAD_mln_t", "PROD_E_TWh", ])
-real2.dump("REAL2")
+             
 
 
-
-
+        
+## gdp   ВВП
+## cpi   инфляция
+## fx    курс
+## pb    платежный баланс 
+## cap   инвестиции
+## hh    доходы и расходы населения
+## gov   госрасходы 
+## oil   нефть
+#
+#
+## FINAL USE:
+##
+##
+#
+## EVALUATE:
+##     не надо обрезать ряды на стадии хранения данных, нужно только для рисунков
+##     for testing must have different frequencies a and q and m
+##     страница html с месяцами, кварталами и годами + сохранить 
+##     все сохранять
+##     сразу делать app в интернете
+#
+## TODO 1:
+##     завести нефть 
+##     обрабатывать значения (разности и темпы роста) - для создания новых переменных
+#
+## TODO 2:
+##     снимать сезонность
+##     сделать инерционный прогноз
+#
+## ENHANCE:
+##     подписи осей графика + количество белого
 
 """
 Timeseries (131):

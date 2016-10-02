@@ -21,3 +21,9 @@ Enhancements:
 - better graphs
 - first column formatting in xls 
 - several sheets in xls file 
+
+May use plotting archives:
+- <https://github.com/epogrebnyak/plotting>
+- <https://github.com/epogrebnyak/data-rosstat-kep/blob/master/kep/getter/plots.py>
+
+
