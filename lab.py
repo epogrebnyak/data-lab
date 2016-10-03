@@ -10,7 +10,7 @@ CSV_PATHS = {'a': os.path.join("csv", "data_annual.txt")
             ,'q': os.path.join("csv", "data_quarter.txt") 
             ,'m': os.path.join("csv", "data_monthly.txt") }
 
-DEFAULT_BACKSHIFT = 10
+DEFAULT_START_YEAR = 2011
 
 DIRS = {".png":"png", ".xls":"xls"}
 
@@ -73,31 +73,36 @@ DFM["TRADE_GOODS_NET_EXPORT_bln_usd"] = ex-im
 
 class Indicators():
 
-    def __init__(self, groupname, labels, freq, start=None, end=None):        
+    def __init__(self, groupname, labels, freq=None, start=None, end=None,
+                 default_start_year=DEFAULT_START_YEAR):
 
-        self.basename = groupname
-        self.freq = freq
-        
+        self.basename = groupname                     
+
+        if not start:   
+           start = str(default_start_year) + "-01"               
+
         self.dfa = self.make_df(labels, "a", start, end)
         self.dfq = self.make_df(labels, "q", start, end)
         self.dfm = self.make_df(labels, "m", start, end)
         
-        self.df  = self.make_df(labels, freq, start, end)
-          
+        if not freq:
+           self.df = self.dfm            
+        elif freq in "aqm":
+           self.freq = freq
+           self.df  = {"a":self.dfa,"q":self.dfq,"m":self.dfm}[freq]  
+        else:
+           raise Exception("Wrong frequency: " + str(freq)) 
+      
     def make_df(self, labels, freq, start, end,  
-                t=DEFAULT_BACKSHIFT, dfs={'a': DFA, 'q': DFQ, 'm': DFM}):
-        try:
-           df = dfs[freq]            
-        except: 
-           raise Exception ("Invalid frequency: " + str(freq))  
-           
+                dfs={'a': DFA, 'q': DFQ, 'm': DFM}):
+        df = dfs[freq]        
         filtered_labels = [x for x in labels if x in df.columns] 
-        df = df[filtered_labels]            
-        
-        if not start:   
-           start = str(df.index[-1].year-DEFAULT_BACKSHIFT) + "-01"  
-           
-        return df.loc[start:end,:]                    
+        df = df[filtered_labels].loc[start:end,:]
+        if df.empty:
+            df["None"]=0
+            print("Warning: missing data in", ",".join(labels))
+        return df
+                   
           
     def to_png(self, my_dpi = MY_DPI, dirs = DIRS):    
         ext = ".png"
@@ -135,13 +140,24 @@ def png_html_stream(groups, freq):
         yield(msg1)
         yield(msg2)
         yield("<BR>")
+        
+def make_xls(indicator_collection):
+    
+    for col in indicator_collection.keys():    
+        print(col)
+        msg1 = Indicators(col, indicator_collection[col], start="1999-01").to_excel()
+        yield(msg1)
+        yield("<BR>")
 
 def to_html(filename, gen):
     with open(filename, "w") as html_file:
         html_file.write("<HTML>\n<BODY>\n")
         html_file.write("<a href=\"annual.html\">По годам</a> \
                          <a href=\"quarterly.html\">По кварталам</a> \
-                         <a href=\"index.html\">По месяцам</a><br>\n")
+                         <a href=\"index.html\">По месяцам</a><br><br>\
+                         <a href=\"xls.html\">Файлы Excel</a> \
+                         <a href=\"https://github.com/epogrebnyak/data-rosstat-kep/blob/master/output/varnames.md\">\
+                         Названия переменных</a><br><br>\n")
         for s in gen:
             html_file.write(s)
         html_file.write("</BODY>\n</HTML>")
@@ -177,10 +193,11 @@ if __name__ == "__main__":
        gen = png_html_stream(groups, freq)
        to_html(pages[freq], gen)
 
-             
-
-
-        
+    gen = make_xls(indicator_collection)
+    to_html("xls.html", gen)
+    # todo: also generate annual/monthly/qtr total file with group by name
+            
+            
 ## gdp   ВВП
 ## cpi   инфляция
 ## fx    курс
