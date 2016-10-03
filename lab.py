@@ -4,72 +4,11 @@ import os
 import pandas as pd
 from datetime import datetime
 
-# -----------------------------------------------------------------------------
-
-CSV_PATHS = {'a': os.path.join("csv", "data_annual.txt")
-            ,'q': os.path.join("csv", "data_quarter.txt") 
-            ,'m': os.path.join("csv", "data_monthly.txt") }
-
+from brush import DFA, DFQ, DFM 
 DEFAULT_START_YEAR = 2011
-
 DIRS = {".png":"png", ".xls":"xls"}
-
 MY_DPI = 96
-
-# -----------------------------------------------------------------------------
-# Import data 
-
-def read_dataframes(paths = CSV_PATHS):
-
-    def to_ts(year):
-        return pd.Timestamp(datetime(int(year),12,31))        
-        
-    dfa = pd.read_csv(paths['a'], converters = {'year':to_ts}, index_col = 'year')    
-    dfq = pd.read_csv(paths['q'], converters = {'time_index':pd.to_datetime}, index_col = 'time_index')
-    dfm = pd.read_csv(paths['m'], converters = {'time_index':pd.to_datetime}, index_col = 'time_index')
-    return dfa, dfq, dfm
-
-DFA, DFQ, DFM =  read_dataframes() 
-
-# -----------------------------------------------------------------------------
-# Brush/transform data, add variables
-
-       
-def deaccumulate(df):
-    df2 = df.copy()
-    for i in range(len(df)):
-        if df.index[i].month > 1:
-            df2.iloc[i] = df.iloc[i]-df.iloc[i-1]
-        else: 
-            df2.iloc[i] = df.iloc[i] 
-    return df2
-
-rev = deaccumulate(DFM["GOV_CONSOLIDATED_REVENUE_ACCUM_bln_rub"])
-exp = deaccumulate(DFM["GOV_CONSOLIDATED_EXPENSE_ACCUM_bln_rub"])            
-DFM["GOV_CONSOLIDATED_EXPENSE_bln_rub"] = exp
-DFM["GOV_CONSOLIDATED_REVENUE_bln_rub"] = rev
-DFM["GOV_CONSOLIDATED_DEFICIT_bln_rub"] = rev-exp
-
-fed = deaccumulate(DFM["GOV_FEDERAL_SURPLUS_ACCUM_bln_rub"])
-subfed = deaccumulate(DFM["GOV_SUBFEDERAL_SURPLUS_ACCUM_bln_rub"])
-
-DFM["GOV_FEDERAL_SURPLUS_bln_rub"] = fed 
-DFM["GOV_SUBFEDERAL_SURPLUS_bln_rub"] = subfed
-DFM["GOV_CONSOLIDATED_SURPLUS_bln_rub"] = fed + subfed 
-
-
-ex = DFM["TRADE_GOODS_EXPORT_bln_usd"]
-im = DFM["TRADE_GOODS_IMPORT_bln_usd"]
-DFM["TRADE_GOODS_NET_EXPORT_bln_usd"] = ex-im
-
-#
-# todo:
-#     get annual values from monthly 
-#     get quarterly values from monthly 
-#
-
-
-# -----------------------------------------------------------------------------
+GRAPH_WIDTH_HEIGHT_PX = (600, 450)
 
 class Indicators():
 
@@ -104,15 +43,16 @@ class Indicators():
         return df
                    
           
-    def to_png(self, my_dpi = MY_DPI, dirs = DIRS):    
+    def to_png(self, my_dpi = MY_DPI, dirs = DIRS, pix = GRAPH_WIDTH_HEIGHT_PX):    
         ext = ".png"
         path = os.path.join(dirs[ext], self.freq + "_" + self.basename + ext)
         if not self.df.empty:
-            ax = self.df.plot(figsize=(600/my_dpi, 450/my_dpi))
+            ax = self.df.plot(figsize=(pix[0]/my_dpi, pix[1]/my_dpi))
             fig = ax.get_figure()
             fig.savefig(path, dpi = MY_DPI)
             fig.clear()
-        return "<img src=\"{0}\">".format(path)                             
+        return "<img src=\"{0}\">".format(path)      
+        
         
     def to_excel(self, dirs = DIRS):        
         ext = ".xls"
@@ -140,24 +80,27 @@ def png_html_stream(groups, freq):
         yield(msg1)
         yield(msg2)
         yield("<BR>")
+
         
-def make_xls(indicator_collection):
-    
-    for col in indicator_collection.keys():    
+def make_xls(indicator_collection):    
+    for col in sorted(indicator_collection.keys()):    
         print(col)
-        msg1 = Indicators(col, indicator_collection[col], start="1999-01").to_excel()
+        msg1 = Indicators(col, indicator_collection[col]).to_excel() # fails on 1999
         yield(msg1)
         yield("<BR>")
 
+        
 def to_html(filename, gen):
     with open(filename, "w") as html_file:
         html_file.write("<HTML>\n<BODY>\n")
-        html_file.write("<a href=\"annual.html\">По годам</a> \
-                         <a href=\"quarterly.html\">По кварталам</a> \
-                         <a href=\"index.html\">По месяцам</a><br><br>\
-                         <a href=\"xls.html\">Файлы Excel</a> \
-                         <a href=\"https://github.com/epogrebnyak/data-rosstat-kep/blob/master/output/varnames.md\">\
-                         Названия переменных</a><br><br>\n")
+        html_file.write("""<a href="annual.html">По годам</a> 
+                         <a href="quarterly.html">По кварталам</a> 
+                         <a href="index.html">По месяцам</a>
+                         <br><br>
+                         <a href="xls.html">Файлы Excel</a> 
+                         <a href="https://github.com/epogrebnyak/data-rosstat-kep/blob/master/output/varnames.md">
+                         Названия переменных</a>
+                         <br><br>\n""")
         for s in gen:
             html_file.write(s)
         html_file.write("</BODY>\n</HTML>")
@@ -166,26 +109,26 @@ def to_html(filename, gen):
 if __name__ == "__main__":
     
     indicator_collection = {
-      "CPI":["CPI_rog", "CPI_NONFOOD_rog", "CPI_FOOD_rog", "CPI_SERVICES_rog"]
-    , "GDP":["I_yoy", "GDP_yoy", "IND_PROD_yoy", "RETAIL_SALES_yoy"]
-    , "GOV":["GOV_CONSOLIDATED_EXPENSE_bln_rub", "GOV_CONSOLIDATED_REVENUE_bln_rub", "GOV_CONSOLIDATED_DEFICIT_bln_rub"]
-    , "GOV2": ["GOV_FEDERAL_SURPLUS_bln_rub", "GOV_SUBFEDERAL_SURPLUS_bln_rub", "GOV_CONSOLIDATED_SURPLUS_bln_rub"]
-    , "FX" :["RUR_EUR_eop", "RUR_USD_eop" ]
-    , "BOP":["TRADE_GOODS_EXPORT_bln_usd", "TRADE_GOODS_IMPORT_bln_usd", "TRADE_GOODS_NET_EXPORT_bln_usd"]
+      "CPI":   ["CPI_rog", "CPI_NONFOOD_rog", "CPI_FOOD_rog", "CPI_SERVICES_rog"]
+    , "GDP":   ["I_yoy", "GDP_yoy", "IND_PROD_yoy", "RETAIL_SALES_yoy"]
+    , "GOV":   ["GOV_CONSOLIDATED_EXPENSE_bln_rub", "GOV_CONSOLIDATED_REVENUE_bln_rub", "GOV_CONSOLIDATED_DEFICIT_bln_rub"]
+    , "GOV2":  ["GOV_FEDERAL_SURPLUS_bln_rub", "GOV_SUBFEDERAL_SURPLUS_bln_rub", "GOV_CONSOLIDATED_SURPLUS_bln_rub"]
+    , "FX" :   ["RUR_EUR_eop", "RUR_USD_eop" ]
+    , "BOP":   ["TRADE_GOODS_EXPORT_bln_usd", "TRADE_GOODS_IMPORT_bln_usd", "TRADE_GOODS_NET_EXPORT_bln_usd"]
     , "CREDIT":["CREDIT_TOTAL_bln_rub", "CORP_DEBT_bln_rub"]
-    , "REAL":["TRANS_bln_t_km", "CONSTR_bln_rub_fix"]
-    , "REAL2":["TRANS_RAILLOAD_mln_t", "PROD_E_TWh"]
+    , "REAL":  ["TRANS_bln_t_km", "CONSTR_bln_rub_fix"]
+    , "REAL2": ["TRANS_RAILLOAD_mln_t", "PROD_E_TWh"]
+    , "INV":   ["NONFINANCIALS_PROFIT_EX_AGRO_bln_rub", "I_bln_rub"]
     }
     
     groups = [("GDP", "CPI"), 
-              ("GOV", "GOV2"),
-              ("FX", None), 
+              ("GOV", "FX"),              
               ("BOP", "CREDIT"), 
               ("REAL", "REAL2")]
      
     pages = {"m":"index.html"
-       , "a":"annual.html"
-       , "q":"quarterly.html"}
+           , "a":"annual.html"
+           , "q":"quarterly.html"}
        
        
     for freq in "aqm": 
@@ -211,22 +154,19 @@ if __name__ == "__main__":
 ## FINAL USE:
 ##
 ##
-#
+
 ## EVALUATE:
-##     не надо обрезать ряды на стадии хранения данных, нужно только для рисунков
-##     for testing must have different frequencies a and q and m
 ##     страница html с месяцами, кварталами и годами + сохранить 
-##     все сохранять
-##     сразу делать app в интернете
-#
+##     app в интернете
+
 ## TODO 1:
 ##     завести нефть 
 ##     обрабатывать значения (разности и темпы роста) - для создания новых переменных
-#
+
 ## TODO 2:
 ##     снимать сезонность
 ##     сделать инерционный прогноз
-#
+
 ## ENHANCE:
 ##     подписи осей графика + количество белого
 
